@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100 font-sans antialiased">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spectroid Real-Time Audio Spectrum & Waterfall Analyzer</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            spectroid: {
+              bg: '#090a0f',
+              card: '#12151e',
+              border: '#232838',
+              accent: '#3b82f6',
+              grid: 'rgba(255, 255, 255, 0.08)',
+              text: '#e2e8f0'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar for Controls */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090a0f;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #232838;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3b82f6;
+    }
+    canvas {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col md:flex-row overflow-hidden bg-spectroid-bg text-slate-200 select-none">
+
+  <!-- LEFT / SIDEBAR CONTROL PANEL -->
+  <aside class="w-full md:w-80 lg:w-96 flex-shrink-0 bg-spectroid-card border-b md:border-b-0 md:border-r border-spectroid-border flex flex-col h-auto md:h-full z-20 shadow-xl overflow-y-auto">
+    <!-- Header Title -->
+    <div class="p-4 border-b border-spectroid-border flex items-center justify-between bg-slate-900/50">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-blue-600/20 text-blue-400 rounded-lg border border-blue-500/30">
+          <i class="fa-solid font-bold fa-chart-line text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg tracking-wide text-white flex items-center gap-2">
+            SPECTROID <span class="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded font-mono font-semibold">WEB</span>
+          </h1>
+          <p class="text-xs text-slate-400">Audio Spectrum & Spectrogram Analyzer</p>
+        </div>
+      </div>
+      <button id="btnPause" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-md text-xs font-semibold transition flex items-center gap-1.5">
+        <i class="fa-solid fa-pause" id="pauseIcon"></i>
+        <span id="pauseLabel">Freeze</span>
+      </button>
+    </div>
+
+    <!-- Scrollable Settings Container -->
+    <div class="p-4 space-y-5 flex-1 text-xs">
+      
+      <!-- Audio Source Selector -->
+      <div class="space-y-2">
+        <label class="font-semibold text-slate-300 uppercase text-[10px] tracking-wider flex items-center justify-between">
+          <span>Audio Input Source</span>
+          <span id="audioStatusBadge" class="text-[10px] font-mono px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded">Ready</span>
+        </label>
+        
+        <div class="grid grid-cols-3 gap-1.5">
+          <button id="srcMic" class="src-btn p-2 rounded-lg bg-blue-600 text-white font-medium flex flex-col items-center justify-center gap-1 border border-blue-500 transition">
+            <i class="fa-solid fa-microphone text-sm"></i>
+            <span>Microphone</span>
+          </button>
+          <button id="srcFile" class="src-btn p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium flex flex-col items-center justify-center gap-1 border border-slate-700 transition">
+            <i class="fa-solid fa-file-audio text-sm"></i>
+            <span>Audio File</span>
+          </button>
+          <button id="srcGen" class="src-btn p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium flex flex-col items-center justify-center gap-1 border border-slate-700 transition">
+            <i class="fa-solid fa-wave-square text-sm"></i>
+            <span>Generator</span>
+          </button>
+        </div>
+
+        <!-- File Input Hidden Field & Controls -->
+        <div id="fileControls" class="hidden pt-2">
+          <label for="audioFileInput" class="w-full flex items-center justify-center px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 border-dashed rounded-lg cursor-pointer transition text-slate-300 gap-2">
+            <i class="fa-solid fa-upload"></i>
+            <span id="fileNameDisplay" class="truncate max-w-[200px]">Choose MP3 / WAV / OGG</span>
+          </label>
+          <input type="file" id="audioFileInput" accept="audio/*" class="hidden">
+          <audio id="audioElement" controls class="w-full mt-2 h-8 rounded text-slate-800"></audio>
+        </div>
+
+        <!-- Tone Generator Controls -->
+        <div id="genControls" class="hidden pt-2 space-y-2 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Signal Type:</span>
+            <select id="genType" class="bg-slate-800 border border-slate-700 text-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-500">
+              <option value="sine">Sine Wave</option>
+              <option value="square">Square Wave</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="sweep">Frequency Sweep (20Hz-20kHz)</option>
+              <option value="white">White Noise</option>
+              <option value="pink">Pink Noise</option>
+            </select>
+          </div>
+          <div id="genFreqContainer" class="flex items-center justify-between gap-2">
+            <span class="text-slate-400">Freq: <span id="genFreqVal" class="font-mono text-blue-400">1000</span> Hz</span>
+            <input type="range" id="genFreq" min="20" max="20000" step="10" value="1000" class="flex-1 accent-blue-500">
+          </div>
+        </div>
+      </div>
+
+      <!-- FFT & Resolution -->
+      <div class="space-y-2 pt-2 border-t border-slate-800">
+        <label class="font-semibold text-slate-300 uppercase text-[10px] tracking-wider">FFT Processing</label>
+        
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">FFT Size (Resolution):</span>
+          <select id="fftSizeSelect" class="bg-slate-800 border border-slate-700 text-slate-200 rounded px-2.5 py-1 font-mono focus:outline-none focus:border-blue-500">
+            <option value="512">512 bins</option>
+            <option value="1024">1024 bins</option>
+            <option value="2048" selected>2048 bins</option>
+            <option value="4096">4096 bins</option>
+            <option value="8192">8192 bins</option>
+            <option value="16384">16384 bins</option>
+          </select>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Time Smoothing: <span id="smoothVal" class="font-mono text-blue-400">0.80</span></span>
+          <input type="range" id="smoothSlider" min="0" max="0.95" step="0.05" value="0.80" class="w-32 accent-blue-500">
+        </div>
+      </div>
+
+      <!-- Scale & Axis Settings -->
+      <div class="space-y-2 pt-2 border-t border-slate-800">
+        <label class="font-semibold text-slate-300 uppercase text-[10px] tracking-wider">Frequency & Decibel Scaling</label>
+        
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Frequency Axis Scale:</span>
+          <div class="inline-flex rounded-md shadow-sm border border-slate-700 p-0.5 bg-slate-900" role="group">
+            <button id="scaleLog" class="px-2.5 py-1 text-[11px] rounded font-medium bg-blue-600 text-white transition">Logarithmic</button>
+            <button id="scaleLinear" class="px-2.5 py-1 text-[11px] rounded font-medium text-slate-400 hover:text-white transition">Linear</button>
+          </div>
+        </div>
+
+        <!-- dB Range -->
+        <div class="space-y-1.5 pt-1">
+          <div class="flex justify-between text-slate-400">
+            <span>Max Amplitude (dB): <span id="maxDbVal" class="font-mono text-blue-400">0 dB</span></span>
+            <span>Min Amplitude (dB): <span id="minDbVal" class="font-mono text-blue-400">-100 dB</span></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] text-slate-500">-120</span>
+            <input type="range" id="minDbSlider" min="-140" max="-40" step="5" value="-100" class="w-full accent-blue-500">
+            <span class="text-[10px] text-slate-500">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Waterfall Heatmap Palette -->
+      <div class="space-y-2 pt-2 border-t border-slate-800">
+        <label class="font-semibold text-slate-300 uppercase text-[10px] tracking-wider">Spectrogram Waterfall Theme</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button data-map="spectroid" class="map-btn p-2 rounded bg-slate-900 border border-blue-500 text-slate-200 flex items-center justify-between">
+            <span>Spectroid Classic</span>
+            <span class="w-4 h-4 rounded-full bg-gradient-to-r from-blue-600 via-green-400 via-yellow-400 to-red-600 border border-white/20"></span>
+          </button>
+          <button data-map="inferno" class="map-btn p-2 rounded bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 flex items-center justify-between">
+            <span>Inferno</span>
+            <span class="w-4 h-4 rounded-full bg-gradient-to-r from-purple-900 via-red-600 via-orange-400 to-yellow-200 border border-white/20"></span>
+          </button>
+          <button data-map="viridis" class="map-btn p-2 rounded bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 flex items-center justify-between">
+            <span>Viridis</span>
+            <span class="w-4 h-4 rounded-full bg-gradient-to-r from-indigo-900 via-teal-500 via-emerald-400 to-yellow-300 border border-white/20"></span>
+          </button>
+          <button data-map="ocean" class="map-btn p-2 rounded bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 flex items-center justify-between">
+            <span>Ocean Blue</span>
+            <span class="w-4 h-4 rounded-full bg-gradient-to-r from-slate-950 via-blue-800 via-cyan-500 to-white border border-white/20"></span>
+          </button>
+          <button data-map="grayscale" class="map-btn p-2 rounded bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 flex items-center justify-between col-span-2">
+            <span>Monochrome / Grayscale</span>
+            <span class="w-4 h-4 rounded-full bg-gradient-to-r from-black via-gray-500 to-white border border-white/20"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Trace Options -->
+      <div class="space-y-2 pt-2 border-t border-slate-800">
+        <label class="font-semibold text-slate-300 uppercase text-[10px] tracking-wider">Spectrum Trace Display</label>
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-300">
+            <input type="checkbox" id="chkPeakHold" checked class="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900">
+            <span>Peak Decay Hold Trace</span>
+          </label>
+          <button id="btnResetMax" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] border border-slate-700 transition">Reset Hold</button>
+        </div>
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-300">
+            <input type="checkbox" id="chkMaxHold" checked class="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900">
+            <span>Max Amplitude Envelope</span>
+          </label>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer Stats / Status -->
+    <div class="p-3 border-t border-spectroid-border bg-slate-950 text-[11px] font-mono text-slate-400 flex justify-between items-center">
+      <span>Sample Rate: <span id="sampleRateDisp" class="text-slate-200">48000</span> Hz</span>
+      <span>Nyquist: <span id="nyquistDisp" class="text-slate-200">24000</span> Hz</span>
+    </div>
+  </aside>
+
+  <!-- MAIN CANVAS VISUALIZER AREA -->
+  <main class="flex-1 flex flex-col h-full bg-black relative overflow-hidden">
+    
+    <!-- Top Live Measurement HUD Bar -->
+    <div id="inspectorHUD" class="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between bg-slate-900/80 backdrop-blur border border-slate-700/60 rounded-lg px-3 py-2 text-xs font-mono shadow-2xl pointer-events-none transition-opacity duration-200">
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-1.5 text-blue-400 font-bold">
+          <i class="fa-solid fa-crosshairs"></i>
+          <span id="hudFreq">--- Hz</span>
+        </div>
+        <div class="text-emerald-400 font-medium">
+          Pitch: <span id="hudNote" class="font-bold">---</span>
+        </div>
+        <div class="text-amber-400 font-medium">
+          Amplitude: <span id="hudDb" class="font-bold">--- dB</span>
+        </div>
+      </div>
+      <div class="text-slate-400 text-[11px] hidden sm:block">
+        Hover canvas to inspect details
+      </div>
+    </div>
+
+    <!-- Dual Canvas View Container -->
+    <div class="flex-1 flex flex-col w-full h-full p-1 gap-1">
+      
+      <!-- TOP CANVAS: Spectrum Plot (Line / dB Graph) -->
+      <div class="relative flex-1 w-full h-1/2 bg-black rounded border border-slate-900 overflow-hidden">
+        <canvas id="spectrumCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+        <div class="absolute top-2 right-2 text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-black/60 text-slate-400 border border-slate-800 pointer-events-none">
+          SPECTRUM (dB vs Frequency)
+        </div>
+      </div>
+
+      <!-- BOTTOM CANVAS: Waterfall Spectrogram -->
+      <div class="relative flex-1 w-full h-1/2 bg-black rounded border border-slate-900 overflow-hidden">
+        <canvas id="waterfallCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+        <div class="absolute top-2 right-2 text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-black/60 text-slate-400 border border-slate-800 pointer-events-none">
+          SPECTROGRAM WATERFALL (Time Scrolling)
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    /**
+     * Spectroid Real-Time Audio Spectrum Analyzer
+     * Core Application Logic & Web Audio Pipeline
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+
+      // --- DOM Elements ---
+      const spectrumCanvas = document.getElementById('spectrumCanvas');
+      const waterfallCanvas = document.getElementById('waterfallCanvas');
+      const specCtx = spectrumCanvas.getContext('2d');
+      const wfCtx = waterfallCanvas.getContext('2d', { willReadFrequently: true });
+
+      // HUD Elements
+      const hudFreq = document.getElementById('hudFreq');
+      const hudNote = document.getElementById('hudNote');
+      const hudDb = document.getElementById('hudDb');
+
+      // Input Controls
+      const srcMic = document.getElementById('srcMic');
+      const srcFile = document.getElementById('srcFile');
+      const srcGen = document.getElementById('srcGen');
+      const audioStatusBadge = document.getElementById('audioStatusBadge');
+
+      const fileControls = document.getElementById('fileControls');
+      const audioFileInput = document.getElementById('audioFileInput');
+      const audioElem = document.getElementById('audioElement');
+      const fileNameDisplay = document.getElementById('fileNameDisplay');
+
+      const genControls = document.getElementById('genControls');
+      const genTypeSelect = document.getElementById('genType');
+      const genFreqInput = document.getElementById('genFreq');
+      const genFreqVal = document.getElementById('genFreqVal');
+
+      // Analyzer Settings Controls
+      const fftSizeSelect = document.getElementById('fftSizeSelect');
+      const smoothSlider = document.getElementById('smoothSlider');
+      const smoothVal = document.getElementById('smoothVal');
+      const scaleLogBtn = document.getElementById('scaleLog');
+      const scaleLinearBtn = document.getElementById('scaleLinear');
+      const minDbSlider = document.getElementById('minDbSlider');
+      const minDbVal = document.getElementById('minDbVal');
+      const maxDbVal = document.getElementById('maxDbVal');
+      const chkPeakHold = document.getElementById('chkPeakHold');
+      const chkMaxHold = document.getElementById('chkMaxHold');
+      const btnResetMax = document.getElementById('btnResetMax');
+      const mapButtons = document.querySelectorAll('.map-btn');
+      const btnPause = document.getElementById('btnPause');
+      const pauseIcon = document.getElementById('pauseIcon');
+      const pauseLabel = document.getElementById('pauseLabel');
+
+      const sampleRateDisp = document.getElementById('sampleRateDisp');
+      const nyquistDisp = document.getElementById('nyquistDisp');
+
+      // --- Audio State & Web Audio API Nodes ---
+      let audioCtx = null;
+      let analyserNode = null;
+      let micStreamNode = null;
+      let fileSourceNode = null;
+      let genOscNode = null;
+      let genGainNode = null;
+      let whiteNoiseBufferNode = null;
+
+      let activeInputMode = 'mic'; // 'mic', 'file', 'gen'
+      let isPaused = false;
+
+      // Parameters
+      let fftSize = 2048;
+      let smoothingTimeConstant = 0.80;
+      let isLogScale = true;
+      let minDb = -100;
+      let maxDb = 0;
+      let colorMapName = 'spectroid';
+
+      // Analysis Buffers
+      let frequencyData = new Float32Array(0);
+      let peakData = new Float32Array(0);  // Decay peak hold
+      let maxData = new Float32Array(0);   // Infinite peak hold
+
+      // Frequency range definitions
+      const MIN_FREQ = 20;
+      let maxFreq = 22050; // Dynamic based on audio context sample rate
+
+      // Offscreen Canvas for Scrolling Waterfall Efficiently
+      const offscreenWf = document.createElement('canvas');
+      const offscreenCtx = offscreenWf.getContext('2d');
+
+      // Mouse Hover State
+      let hoverX = -1;
+      let hoverY = -1;
+      let hoverCanvasType = null; // 'spectrum' or 'waterfall'
+
+      // --- Initialization ---
+      function initAudioContext() {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+          maxFreq = audioCtx.sampleRate / 2;
+          sampleRateDisp.textContent = audioCtx.sampleRate;
+          nyquistDisp.textContent = Math.round(maxFreq);
+
+          analyserNode = audioCtx.createAnalyser();
+          analyserNode.fftSize = fftSize;
+          analyserNode.smoothingTimeConstant = smoothingTimeConstant;
+          analyserNode.minDecibels = minDb;
+          analyserNode.maxDecibels = maxDb;
+
+          allocateBuffers();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+      }
+
+      function allocateBuffers() {
+        if (!analyserNode) return;
+        const binCount = analyserNode.frequencyBinCount;
+        frequencyData = new Float32Array(binCount);
+        peakData = new Float32Array(binCount);
+        maxData = new Float32Array(binCount);
+        resetMaxHold();
+      }
+
+      function resetMaxHold() {
+        if (!maxData) return;
+        for (let i = 0; i < maxData.length; i++) {
+          maxData[i] = -Infinity;
+          peakData[i] = -Infinity;
+        }
+      }
+
+      // --- Waterfall Color Heatmaps ---
+      function getColorMapRGB(value) {
+        // value normalized [0..1]
+        const v = Math.max(0, Math.min(1, value));
+
+        if (colorMapName === 'inferno') {
+          // Inferno palette approximation
+          const r = Math.min(255, Math.max(0, Math.floor(255 * Math.pow(v, 0.7) * 1.5)));
+          const g = Math.min(255, Math.max(0, Math.floor(255 * Math.pow(v, 2.0) * 1.2)));
+          const b = Math.min(255, Math.max(0, Math.floor(255 * Math.pow(v, 4.0) * 2.5)));
+          return [r, g, b];
+        } else if (colorMapName === 'viridis') {
+          // Viridis palette approximation
+          const r = Math.floor(255 * (0.2 + 0.8 * Math.sin(v * Math.PI - 0.5)));
+          const g = Math.floor(255 * (v < 0.5 ? v * 1.8 : 0.9 - (v - 0.5) * 0.4));
+          const b = Math.floor(255 * (0.4 + 0.6 * Math.cos(v * Math.PI)));
+          return [Math.max(0, Math.min(255, r)), Math.max(0, Math.min(255, g)), Math.max(0, Math.min(255, b))];
+        } else if (colorMapName === 'ocean') {
+          // Deep Blue to Cyan to White
+          const r = Math.floor(255 * Math.pow(v, 3));
+          const g = Math.floor(255 * Math.pow(v, 1.5));
+          const b = Math.floor(255 * Math.sqrt(v));
+          return [r, g, b];
+        } else if (colorMapName === 'grayscale') {
+          const intensity = Math.floor(255 * v);
+          return [intensity, intensity, intensity];
+        } else {
+          // Spectroid Classic Heatmap: Dark Blue -> Cyan -> Green -> Yellow -> Red -> Magenta
+          let r = 0, g = 0, b = 0;
+          if (v < 0.2) {
+            // Dark Blue -> Blue
+            b = Math.floor(v / 0.2 * 255);
+          } else if (v < 0.4) {
+            // Blue -> Cyan
+            b = 255;
+            g = Math.floor((v - 0.2) / 0.2 * 255);
+          } else if (v < 0.6) {
+            // Cyan -> Green
+            g = 255;
+            b = Math.floor((1 - (v - 0.4) / 0.2) * 255);
+          } else if (v < 0.8) {
+            // Green -> Yellow -> Red
+            g = Math.floor((1 - (v - 0.6) / 0.2) * 255);
+            r = 255;
+          } else {
+            // Red -> White/Magenta
+            r = 255;
+            g = Math.floor((v - 0.8) / 0.2 * 200);
+            b = Math.floor((v - 0.8) / 0.2 * 255);
+          }
+          return [r, g, b];
+        }
+      }
+
+      // --- Input Sources Handler ---
+      async function setupAudioSource(mode) {
+        initAudioContext();
+        activeInputMode = mode;
+
+        // Disconnect existing inputs
+        if (micStreamNode) {
+          micStreamNode.disconnect();
+          micStreamNode = null;
+        }
+        if (fileSourceNode) {
+          fileSourceNode.disconnect();
+          fileSourceNode = null;
+        }
+        stopGenerator();
+
+        // Update UI Tabs
+        [srcMic, srcFile, srcGen].forEach(btn => {
+          btn.className = 'src-btn p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium flex flex-col items-center justify-center gap-1 border border-slate-700 transition';
+        });
+
+        fileControls.classList.add('hidden');
+        genControls.classList.add('hidden');
+        audioElem.pause();
+
+        try {
+          if (mode === 'mic') {
+            srcMic.className = 'src-btn p-2 rounded-lg bg-blue-600 text-white font-medium flex flex-col items-center justify-center gap-1 border border-blue-500 transition';
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            micStreamNode = audioCtx.createMediaStreamSource(stream);
+            micStreamNode.connect(analyserNode);
+            audioStatusBadge.textContent = 'Mic Active';
+            audioStatusBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded';
+          } 
+          else if (mode === 'file') {
+            srcFile.className = 'src-btn p-2 rounded-lg bg-blue-600 text-white font-medium flex flex-col items-center justify-center gap-1 border border-blue-500 transition';
+            fileControls.classList.remove('hidden');
+            if (!fileSourceNode) {
+              fileSourceNode = audioCtx.createMediaElementSource(audioElem);
+              fileSourceNode.connect(analyserNode);
+              analyserNode.connect(audioCtx.destination); // Play to speakers
+            }
+            audioStatusBadge.textContent = 'File Ready';
+            audioStatusBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded';
+          } 
+          else if (mode === 'gen') {
+            srcGen.className = 'src-btn p-2 rounded-lg bg-blue-600 text-white font-medium flex flex-col items-center justify-center gap-1 border border-blue-500 transition';
+            genControls.classList.remove('hidden');
+            startGenerator();
+            audioStatusBadge.textContent = 'Gen Playing';
+            audioStatusBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded';
+          }
+        } catch (err) {
+          console.error("Audio Input Error:", err);
+          audioStatusBadge.textContent = 'Input Error';
+          audioStatusBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded';
+        }
+      }
+
+      // Signal / Tone Generator Implementation
+      function startGenerator() {
+        stopGenerator();
+        if (!audioCtx) return;
+
+        genGainNode = audioCtx.createGain();
+        genGainNode.gain.value = 0.2; // Safe output level
+        genGainNode.connect(analyserNode);
+        analyserNode.connect(audioCtx.destination); // Play synth output
+
+        const type = genTypeSelect.value;
+        const freq = parseFloat(genFreqInput.value);
+
+        if (type === 'white') {
+          // White Noise Buffer
+          const bufferSize = audioCtx.sampleRate * 2;
+          const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+          }
+          whiteNoiseBufferNode = audioCtx.createBufferSource();
+          whiteNoiseBufferNode.buffer = buffer;
+          whiteNoiseBufferNode.loop = true;
+          whiteNoiseBufferNode.connect(genGainNode);
+          whiteNoiseBufferNode.start();
+        } else if (type === 'pink') {
+          // Pink Noise Filtered Buffer
+          const bufferSize = audioCtx.sampleRate * 2;
+          const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+          const data = buffer.getChannelData(0);
+          let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+          for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            b1 = 0.99332 * b1 + white * 0.0750759;
+            b2 = 0.96900 * b2 + white * 0.1538520;
+            b3 = 0.86650 * b3 + white * 0.3104856;
+            b4 = 0.55000 * b4 + white * 0.5329522;
+            b5 = -0.7616 * b5 - white * 0.0168980;
+            data[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+            data[i] *= 0.11; // scale down
+            b6 = white * 0.115926;
+          }
+          whiteNoiseBufferNode = audioCtx.createBufferSource();
+          whiteNoiseBufferNode.buffer = buffer;
+          whiteNoiseBufferNode.loop = true;
+          whiteNoiseBufferNode.connect(genGainNode);
+          whiteNoiseBufferNode.start();
+        } else if (type === 'sweep') {
+          // Frequency Sweep (20Hz -> 20kHz over 5 sec)
+          genOscNode = audioCtx.createOscillator();
+          genOscNode.type = 'sine';
+          genOscNode.frequency.setValueAtTime(20, audioCtx.currentTime);
+          genOscNode.frequency.exponentialRampToValueAtTime(20000, audioCtx.currentTime + 5);
+          genOscNode.connect(genGainNode);
+          genOscNode.start();
+          // Loop sweep
+          genOscNode.onended = () => { if (activeInputMode === 'gen') startGenerator(); };
+          genOscNode.stop(audioCtx.currentTime + 5.1);
+        } else {
+          // Standard Oscillators (Sine, Square, Sawtooth)
+          genOscNode = audioCtx.createOscillator();
+          genOscNode.type = type;
+          genOscNode.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          genOscNode.connect(genGainNode);
+          genOscNode.start();
+        }
+      }
+
+      function stopGenerator() {
+        if (genOscNode) {
+          try { genOscNode.stop(); genOscNode.disconnect(); } catch (e) {}
+          genOscNode = null;
+        }
+        if (whiteNoiseBufferNode) {
+          try { whiteNoiseBufferNode.stop(); whiteNoiseBufferNode.disconnect(); } catch (e) {}
+          whiteNoiseBufferNode = null;
+        }
+        if (genGainNode) {
+          genGainNode.disconnect();
+          genGainNode = null;
+        }
+        // Disconnect analyser from destination if returning to Mic
+        if (activeInputMode !== 'file' && activeInputMode !== 'gen' && analyserNode) {
+          try { analyserNode.disconnect(audioCtx.destination); } catch (e) {}
+        }
+      }
+
+      // --- Frequency Mapping & Scale Functions ---
+      function freqToX(freq, width) {
+        if (isLogScale) {
+          const minLog = Math.log10(MIN_FREQ);
+          const maxLog = Math.log10(maxFreq);
+          const freqLog = Math.log10(Math.max(freq, MIN_FREQ));
+          return ((freqLog - minLog) / (maxLog - minLog)) * width;
+        } else {
+          return ((freq - MIN_FREQ) / (maxFreq - MIN_FREQ)) * width;
+        }
+      }
+
+      function xToFreq(x, width) {
+        const norm = Math.max(0, Math.min(1, x / width));
+        if (isLogScale) {
+          const minLog = Math.log10(MIN_FREQ);
+          const maxLog = Math.log10(maxFreq);
+          return Math.pow(10, minLog + norm * (maxLog - minLog));
+        } else {
+          return MIN_FREQ + norm * (maxFreq - MIN_FREQ);
+        }
+      }
+
+      function dbToY(db, height) {
+        const norm = (db - minDb) / (maxDb - minDb);
+        return height - (norm * height);
+      }
+
+      function yToDb(y, height) {
+        const norm = (height - y) / height;
+        return minDb + norm * (maxDb - minDb);
+      }
+
+      // Musical Note Pitch Pitch Helper
+      function freqToNote(freq) {
+        if (freq < 16) return "---";
+        const A4 = 440;
+        const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        const halfSteps = 12 * Math.log2(freq / A4);
+        const noteIndex = Math.round(halfSteps) + 57; // 57 half steps from C0 to A4
+        const octave = Math.floor(noteIndex / 12);
+        const noteName = notes[(noteIndex % 12 + 12) % 12];
+        const cents = Math.round((halfSteps - Math.round(halfSteps)) * 100);
+        const centsStr = cents >= 0 ? `+${cents}` : `${cents}`;
+        return `${noteName}${octave} (${centsStr}¢)`;
+      }
+
+      // --- Canvas Sizing & Layout Management ---
+      function resizeCanvases() {
+        const dpr = window.devicePixelRatio || 1;
+        
+        [spectrumCanvas, waterfallCanvas].forEach(canvas => {
+          const rect = canvas.getBoundingClientRect();
+          canvas.width = Math.floor(rect.width * dpr);
+          canvas.height = Math.floor(rect.height * dpr);
+        });
+
+        // Resize Offscreen Waterfall Buffer
+        if (waterfallCanvas.width > 0 && waterfallCanvas.height > 0) {
+          if (offscreenWf.width !== waterfallCanvas.width || offscreenWf.height !== waterfallCanvas.height) {
+            // Preserve contents during resize
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = offscreenWf.width;
+            tempCanvas.height = offscreenWf.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(offscreenWf, 0, 0);
+
+            offscreenWf.width = waterfallCanvas.width;
+            offscreenWf.height = waterfallCanvas.height;
+            offscreenCtx.fillStyle = '#000000';
+            offscreenCtx.fillRect(0, 0, offscreenWf.width, offscreenWf.height);
+            offscreenCtx.drawImage(tempCanvas, 0, 0, offscreenWf.width, offscreenWf.height);
+          }
+        }
+      }
+
+      window.addEventListener('resize', resizeCanvases);
+
+      // --- Main Render Loop ---
+      function render() {
+        requestAnimationFrame(render);
+
+        if (!analyserNode) return;
+
+        // Fetch frequency data if not paused
+        if (!isPaused) {
+          analyserNode.getFloatFrequencyData(frequencyData);
+
+          // Update Peak Hold & Max Envelopes
+          const binCount = analyserNode.frequencyBinCount;
+          for (let i = 0; i < binCount; i++) {
+            const val = frequencyData[i];
+            
+            // Peak decay trace (slow falloff)
+            if (val > peakData[i]) {
+              peakData[i] = val;
+            } else {
+              peakData[i] -= 0.4; // Decay rate in dB per frame
+            }
+
+            // Absolute max hold
+            if (val > maxData[i]) {
+              maxData[i] = val;
+            }
+          }
+
+          // Scroll & Update Waterfall Spectrogram
+          updateWaterfallCanvas();
+        }
+
+        // Render Spectrum Plot
+        drawSpectrumCanvas();
+
+        // Render Waterfall on main view
+        drawWaterfallCanvas();
+
+        // Update Mouse Inspection HUD
+        updateHUD();
+      }
+
+      // --- Render Spectrum Plot (Top Canvas) ---
+      function drawSpectrumCanvas() {
+        const w = spectrumCanvas.width;
+        const h = spectrumCanvas.height;
+        const dpr = window.devicePixelRatio || 1;
+
+        specCtx.fillStyle = '#090a0f';
+        specCtx.fillRect(0, 0, w, h);
+
+        if (!frequencyData || frequencyData.length === 0) return;
+
+        // 1. Draw Grid Lines (Frequency & dB)
+        specCtx.lineWidth = 1 * dpr;
+        specCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        specCtx.fillStyle = '#64748b';
+        specCtx.font = `${10 * dpr}px JetBrains Mono`;
+
+        // Horizontal dB Grid Lines (-20, -40, -60, -80, -100)
+        for (let db = 0; db >= minDb; db -= 20) {
+          const y = dbToY(db, h);
+          specCtx.beginPath();
+          specCtx.moveTo(0, y);
+          specCtx.lineTo(w, y);
+          specCtx.stroke();
+
+          specCtx.fillText(`${db} dB`, 8 * dpr, y - 4 * dpr);
+        }
+
+        // Vertical Frequency Grid Lines
+        const gridFreqs = isLogScale 
+          ? [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+          : [2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 18000, 20000];
+
+        gridFreqs.forEach(freq => {
+          if (freq <= maxFreq) {
+            const x = freqToX(freq, w);
+            specCtx.beginPath();
+            specCtx.moveTo(x, 0);
+            specCtx.lineTo(x, h);
+            specCtx.stroke();
+
+            const label = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
+            specCtx.fillText(label, x + 4 * dpr, h - 8 * dpr);
+          }
+        });
+
+        const binCount = analyserNode.frequencyBinCount;
+        const sampleRate = audioCtx.sampleRate;
+
+        // 2. Draw Max Envelope Line (Red/Orange outline)
+        if (chkMaxHold.checked) {
+          specCtx.beginPath();
+          specCtx.strokeStyle = 'rgba(239, 68, 68, 0.6)'; // Red-500
+          specCtx.lineWidth = 1.5 * dpr;
+          
+          for (let i = 0; i < binCount; i++) {
+            const freq = (i * sampleRate) / (2 * binCount);
+            if (freq < MIN_FREQ || freq > maxFreq) continue;
+            const x = freqToX(freq, w);
+            const y = dbToY(maxData[i], h);
+
+            if (i === 0) specCtx.moveTo(x, y);
+            else specCtx.lineTo(x, y);
+          }
+          specCtx.stroke();
+        }
+
+        // 3. Draw Peak Hold Trace (Cyan/Blue dashed)
+        if (chkPeakHold.checked) {
+          specCtx.beginPath();
+          specCtx.strokeStyle = '#06b6d4'; // Cyan-500
+          specCtx.lineWidth = 1.5 * dpr;
+
+          for (let i = 0; i < binCount; i++) {
+            const freq = (i * sampleRate) / (2 * binCount);
+            if (freq < MIN_FREQ || freq > maxFreq) continue;
+            const x = freqToX(freq, w);
+            const y = dbToY(peakData[i], h);
+
+            if (i === 0) specCtx.moveTo(x, y);
+            else specCtx.lineTo(x, y);
+          }
+          specCtx.stroke();
+        }
+
+        // 4. Draw Instantaneous Spectrum Real-time Line & Filled Area
+        specCtx.beginPath();
+        specCtx.strokeStyle = '#3b82f6'; // Blue-500
+        specCtx.lineWidth = 2 * dpr;
+
+        // Gradient Fill under curve
+        const grad = specCtx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, 'rgba(59, 130, 246, 0.35)');
+        grad.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+
+        let firstPoint = true;
+        for (let i = 0; i < binCount; i++) {
+          const freq = (i * sampleRate) / (2 * binCount);
+          if (freq < MIN_FREQ || freq > maxFreq) continue;
+          const x = freqToX(freq, w);
+          const y = dbToY(frequencyData[i], h);
+
+          if (firstPoint) {
+            specCtx.moveTo(x, y);
+            firstPoint = false;
+          } else {
+            specCtx.lineTo(x, y);
+          }
+        }
+        specCtx.stroke();
+
+        // Close path for fill
+        specCtx.lineTo(w, h);
+        specCtx.lineTo(0, h);
+        specCtx.fillStyle = grad;
+        specCtx.fill();
+
+        // 5. Spectrum Canvas Inspector Cursor
+        if (hoverCanvasType === 'spectrum' && hoverX >= 0) {
+          specCtx.strokeStyle = '#f59e0b'; // Amber cursor line
+          specCtx.lineWidth = 1 * dpr;
+          specCtx.setLineDash([4 * dpr, 4 * dpr]);
+
+          // Vertical Freq Line
+          specCtx.beginPath();
+          specCtx.moveTo(hoverX, 0);
+          specCtx.lineTo(hoverX, h);
+          specCtx.stroke();
+
+          // Horizontal dB Line
+          specCtx.beginPath();
+          specCtx.moveTo(0, hoverY);
+          specCtx.lineTo(w, hoverY);
+          specCtx.stroke();
+
+          specCtx.setLineDash([]); // Reset
+        }
+      }
+
+      // --- Update Offscreen Waterfall Canvas Buffer ---
+      function updateWaterfallCanvas() {
+        const w = offscreenWf.width;
+        const h = offscreenWf.height;
+        if (w === 0 || h === 0) return;
+
+        // Shift existing content down by 2 pixels (scrolling waterfall effect)
+        const scrollStep = 2;
+        offscreenCtx.drawImage(offscreenWf, 0, 0, w, h - scrollStep, 0, scrollStep, w, h - scrollStep);
+
+        // Draw new top row
+        const imgData = offscreenCtx.createImageData(w, scrollStep);
+        const data = imgData.data;
+        const binCount = analyserNode.frequencyBinCount;
+        const sampleRate = audioCtx.sampleRate;
+
+        for (let x = 0; x < w; x++) {
+          const freq = xToFreq(x, w);
+          // Interpolate frequency bin
+          const binIndex = (freq / (sampleRate / 2)) * binCount;
+          const indexFloor = Math.floor(binIndex);
+          const indexCeil = Math.min(binCount - 1, Math.ceil(binIndex));
+          const frac = binIndex - indexFloor;
+
+          let db = minDb;
+          if (indexFloor >= 0 && indexCeil < binCount) {
+            db = frequencyData[indexFloor] * (1 - frac) + frequencyData[indexCeil] * frac;
+          }
+
+          // Normalize decibel level between 0.0 and 1.0
+          const normDb = Math.max(0, Math.min(1, (db - minDb) / (maxDb - minDb)));
+          const [r, g, b] = getColorMapRGB(normDb);
+
+          for (let row = 0; row < scrollStep; row++) {
+            const pixelIndex = (row * w + x) * 4;
+            data[pixelIndex] = r;
+            data[pixelIndex + 1] = g;
+            data[pixelIndex + 2] = b;
+            data[pixelIndex + 3] = 255; // Alpha
+          }
+        }
+
+        offscreenCtx.putImageData(imgData, 0, 0);
+      }
+
+      // --- Render Waterfall Canvas (Bottom Canvas) ---
+      function drawWaterfallCanvas() {
+        const w = waterfallCanvas.width;
+        const h = waterfallCanvas.height;
+        const dpr = window.devicePixelRatio || 1;
+
+        // Copy offscreen rendered waterfall buffer onto visible canvas
+        wfCtx.drawImage(offscreenWf, 0, 0);
+
+        // Overlay Grid Lines on Waterfall
+        wfCtx.lineWidth = 1 * dpr;
+        wfCtx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        wfCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        wfCtx.font = `${10 * dpr}px JetBrains Mono`;
+
+        const gridFreqs = isLogScale 
+          ? [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+          : [2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 18000, 20000];
+
+        gridFreqs.forEach(freq => {
+          if (freq <= maxFreq) {
+            const x = freqToX(freq, w);
+            wfCtx.beginPath();
+            wfCtx.moveTo(x, 0);
+            wfCtx.lineTo(x, h);
+            wfCtx.stroke();
+
+            const label = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
+            wfCtx.fillText(label, x + 4 * dpr, h - 8 * dpr);
+          }
+        });
+
+        // Waterfall Cursor Inspection Overlay
+        if (hoverCanvasType === 'waterfall' && hoverX >= 0) {
+          wfCtx.strokeStyle = '#f59e0b';
+          wfCtx.lineWidth = 1 * dpr;
+          wfCtx.setLineDash([4 * dpr, 4 * dpr]);
+
+          wfCtx.beginPath();
+          wfCtx.moveTo(hoverX, 0);
+          wfCtx.lineTo(hoverX, h);
+          wfCtx.stroke();
+
+          wfCtx.beginPath();
+          wfCtx.moveTo(0, hoverY);
+          wfCtx.lineTo(w, hoverY);
+          wfCtx.stroke();
+
+          wfCtx.setLineDash([]);
+        }
+      }
+
+      // --- Update HUD Bar on Cursor Hover ---
+      function updateHUD() {
+        if (hoverX < 0) {
+          hudFreq.textContent = "--- Hz";
+          hudNote.textContent = "---";
+          hudDb.textContent = "--- dB";
+          return;
+        }
+
+        const activeCanvas = hoverCanvasType === 'spectrum' ? spectrumCanvas : waterfallCanvas;
+        const freq = xToFreq(hoverX, activeCanvas.width);
+        const note = freqToNote(freq);
+
+        let dbStr = "---";
+        if (hoverCanvasType === 'spectrum') {
+          const db = yToDb(hoverY, activeCanvas.height);
+          dbStr = `${db.toFixed(1)} dB`;
+        } else {
+          // On Waterfall, derive instantaneous dB from buffer bin
+          if (analyserNode && frequencyData.length > 0) {
+            const binCount = analyserNode.frequencyBinCount;
+            const binIndex = Math.round((freq / (audioCtx.sampleRate / 2)) * binCount);
+            if (binIndex >= 0 && binIndex < binCount) {
+              dbStr = `${frequencyData[binIndex].toFixed(1)} dB`;
+            }
+          }
+        }
+
+        hudFreq.textContent = `${Math.round(freq)} Hz`;
+        hudNote.textContent = note;
+        hudDb.textContent = dbStr;
+      }
+
+      // --- Event Listeners & UI Binding ---
+
+      // Input Source Selection Buttons
+      srcMic.addEventListener('click', () => setupAudioSource('mic'));
+      srcFile.addEventListener('click', () => setupAudioSource('file'));
+      srcGen.addEventListener('click', () => setupAudioSource('gen'));
+
+      // File Uploader Handler
+      audioFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          fileNameDisplay.textContent = file.name;
+          audioElem.src = URL.createObjectURL(file);
+          audioElem.play();
+          if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+      });
+
+      // Generator Settings Handlers
+      genTypeSelect.addEventListener('change', () => {
+        const isTone = ['sine', 'square', 'sawtooth'].includes(genTypeSelect.value);
+        document.getElementById('genFreqContainer').style.display = isTone ? 'flex' : 'none';
+        if (activeInputMode === 'gen') startGenerator();
+      });
+      genFreqInput.addEventListener('input', () => {
+        genFreqVal.textContent = genFreqInput.value;
+        if (genOscNode && audioCtx) {
+          genOscNode.frequency.setValueAtTime(parseFloat(genFreqInput.value), audioCtx.currentTime);
+        }
+      });
+
+      // Analyzer Parameters
+      fftSizeSelect.addEventListener('change', (e) => {
+        fftSize = parseInt(e.target.value, 10);
+        if (analyserNode) {
+          analyserNode.fftSize = fftSize;
+          allocateBuffers();
+        }
+      });
+
+      smoothSlider.addEventListener('input', (e) => {
+        smoothingTimeConstant = parseFloat(e.target.value);
+        smoothVal.textContent = smoothingTimeConstant.toFixed(2);
+        if (analyserNode) analyserNode.smoothingTimeConstant = smoothingTimeConstant;
+      });
+
+      // Logarithmic vs Linear Frequency Scale Toggle
+      scaleLogBtn.addEventListener('click', () => {
+        isLogScale = true;
+        scaleLogBtn.className = 'px-2.5 py-1 text-[11px] rounded font-medium bg-blue-600 text-white transition';
+        scaleLinearBtn.className = 'px-2.5 py-1 text-[11px] rounded font-medium text-slate-400 hover:text-white transition';
+      });
+      scaleLinearBtn.addEventListener('click', () => {
+        isLogScale = false;
+        scaleLinearBtn.className = 'px-2.5 py-1 text-[11px] rounded font-medium bg-blue-600 text-white transition';
+        scaleLogBtn.className = 'px-2.5 py-1 text-[11px] rounded font-medium text-slate-400 hover:text-white transition';
+      });
+
+      // Min dB Slider
+      minDbSlider.addEventListener('input', (e) => {
+        minDb = parseInt(e.target.value, 10);
+        minDbVal.textContent = `${minDb} dB`;
+        if (analyserNode) analyserNode.minDecibels = minDb;
+      });
+
+      // Waterfall Heatmap Theme Buttons
+      mapButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          mapButtons.forEach(b => {
+            b.classList.remove('border-blue-500', 'text-slate-200');
+            b.classList.add('border-slate-800', 'text-slate-400');
+          });
+          btn.classList.remove('border-slate-800', 'text-slate-400');
+          btn.classList.add('border-blue-500', 'text-slate-200');
+          colorMapName = btn.dataset.map;
+        });
+      });
+
+      // Reset Max Hold Envelope
+      btnResetMax.addEventListener('click', resetMaxHold);
+
+      // Freeze / Pause Button
+      btnPause.addEventListener('click', () => {
+        isPaused = !isPaused;
+        if (isPaused) {
+          btnPause.classList.remove('bg-amber-500/10', 'text-amber-400', 'border-amber-500/30');
+          btnPause.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/30');
+          pauseIcon.className = 'fa-solid fa-play';
+          pauseLabel.textContent = 'Resume';
+        } else {
+          btnPause.classList.remove('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/30');
+          btnPause.classList.add('bg-amber-500/10', 'text-amber-400', 'border-amber-500/30');
+          pauseIcon.className = 'fa-solid fa-pause';
+          pauseLabel.textContent = 'Freeze';
+        }
+      });
+
+      // Pointer / Mouse Inspection Events
+      function bindCanvasHover(canvas, type) {
+        const updateCoords = (e) => {
+          const rect = canvas.getBoundingClientRect();
+          const dpr = window.devicePixelRatio || 1;
+          hoverX = (e.clientX - rect.left) * dpr;
+          hoverY = (e.clientY - rect.top) * dpr;
+          hoverCanvasType = type;
+        };
+
+        canvas.addEventListener('pointermove', updateCoords);
+        canvas.addEventListener('pointerenter', updateCoords);
+        canvas.addEventListener('pointerleave', () => {
+          hoverX = -1;
+          hoverY = -1;
+          hoverCanvasType = null;
+        });
+      }
+
+      bindCanvasHover(spectrumCanvas, 'spectrum');
+      bindCanvasHover(waterfallCanvas, 'waterfall');
+
+      // Start Default Microphone Input on initial interaction
+      const startInitialAudio = () => {
+        setupAudioSource('mic');
+        window.removeEventListener('click', startInitialAudio);
+        window.removeEventListener('keydown', startInitialAudio);
+      };
+      window.addEventListener('click', startInitialAudio);
+      window.addEventListener('keydown', startInitialAudio);
+
+      // Initialize Canvases and Kick Off Loop
+      resizeCanvases();
+      requestAnimationFrame(render);
+    });
+  </script>
+</body>
+          </html>
